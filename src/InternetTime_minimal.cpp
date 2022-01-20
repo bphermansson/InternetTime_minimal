@@ -1,14 +1,5 @@
-// Minimal internet time fetcher for ESP8266 based devices.
-#if defined(ESP8266)
-  #pragma message "ESP8266"
-  #include <ESP8266WiFi.h>
-#elif defined(ESP32)
-  #pragma message "ESP32"
-  #include <WiFi.h>
-#else
-  #error "This ain't a ESP8266 or ESP32, dumbo!"
-#endif
-
+// Minimal internet time fetcher for ESP32 based devices.
+#include <WiFi.h>
 #include "InternetTime_minimal.h"
 
 const char* ssid     = "BrandstorpWifi";                    // your network SSID (name)
@@ -16,36 +7,32 @@ const char* password = "Brandstorp";                    // your network password
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 3600;
 const int   daylightOffset_sec = 3600;
-char buffer[80];
 
 void setup() {
   Serial.begin(115200);
   delay(10);
+  WiFi.persistent(false);  // Do not write Wifi settings to flash
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
 
+  uint8_t connAttempts = 0;
+    while (WiFi.status() != WL_CONNECTED) {
+    Serial.printf(". %i \n", connAttempts);
+    connAttempts++;
+    if (connAttempts>15) {
+      Serial.println(F("WiFi connection error, check your settings."));    
+      Serial.println((String)"In settings ssid="+ssid+" and pass="+password);      
+      while(connAttempts > 15) {
+        yield();
+      }
+    }
+    delay(1000);
+  }
   Serial.println();
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  Serial.println("\nWaiting for time");
-  
-  while (!time(nullptr))
-  {
-    Serial.print(".");
-    delay(1000);
-  }
-  delay(1000);
-  Serial.println("Setup done.");
-
 }
 
 void loop() {
@@ -55,15 +42,14 @@ void loop() {
 
 void printLocalTime()
 {
-  time_t rawtime;
-  struct tm * timeinfo;
-  time (&rawtime);
-  timeinfo = localtime (&rawtime);
-  strftime (buffer,80," %d %B %Y %H:%M:%S ",timeinfo);
-  Serial.println(buffer);
-
-#if defined(ESP32)
-  // %S doesnt work on the ESP32, so we use 'raw time' as epoch. 
-  Serial.println(rawtime);
-#endif
+  struct tm time;
+   
+  if(!getLocalTime(&time)){
+    Serial.println("Could not obtain time info");
+    return;
+  }
+  char my_time[20];
+  snprintf(my_time, 17, "%d-%02d-%02d %02d:%02d\n", (time.tm_year+1900), time.tm_mon+1,time.tm_mday, time.tm_hour, time.tm_min);
+  Serial.println(my_time);
 }
+
